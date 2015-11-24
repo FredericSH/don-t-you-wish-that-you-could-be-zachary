@@ -163,6 +163,12 @@ class Snake{
   boolean isDead(){
       return dead;  
   }
+  void setLayer(int newLayer){
+    layer = newLayer;
+  }
+  int getLayer(){
+    return layer;
+  }
 };
 
 const int fps = 30;
@@ -174,37 +180,63 @@ const int fps = 30;
 
 class GameManager{
   private:
-    Snake* s;
+    Snake* s[3];
     JoystickListener* js;
+    void parseClientPacket(uint8_t packet, Snake* s){
+      if(packet > 3){
+        if(packet == 4){
+          s->setLayer( s->getLayer() + 1 %3);
+          
+        }else if(packet ==5){
+          s->setLayer( s->getLayer() - 1 %3);
+          
+        }
+      }
+      else{
+        s->setDirection(packet);
+      }
+    }
   public:    
-    GameManager() : s(new Snake(64,80,UP,0xFF00,20)) , js(new JoystickListener(VERT,HOR,SEL,450)){
-      tft.fillScreen(0);      
+    GameManager() : js (new JoystickListener(VERT,HOR,SEL,450)){
+      tft.fillScreen(0);
+      s[0] = new Snake(20,20,DOWN,0xFF00,20);
+      s[1] = new Snake(20,100,RIGHT,0x0FF0,20);
+      s[2] = new Snake(100,108,UP,0x00FF,20);
     }
     void run(){
       uint32_t time = millis();
-      while(!s->isDead()){
+      while(!s[0]->isDead()){
         if(millis() - time > 1000/fps){
           time = millis();
-          s->update();
+          for(int i = 0; i < 3; i++){
+            s[i]->update();
+          }
           if(js->isPushed()){
             int deltaH = js->getHorizontal() - js->getHorizontalBaseline();
             int deltaV = js->getVertical() - js->getVerticalBaseline();
             if(abs(deltaH) > abs(deltaV)){
-              s->setDirection((deltaH > 0) ? 1 : 3);    
+              s[0]->setDirection((deltaH > 0) ? 1 : 3);    
             }
             else{
-              s->setDirection((deltaV > 0) ? 2 : 0);
+              s[0]->setDirection((deltaV > 0) ? 2 : 0);
             }
+          }
+          if(Serial2.available()){
+            parseClientPacket(Serial2.read(),s[1]);
+          }
+          if(Serial3.available()){
+            parseClientPacket(Serial3.read(),s[2]);
           }
         }
       }  
     }
-  
 };
 int main(){
   init();
   tft.initR(INITR_REDTAB); // initialize a ST7735R chip, green tab
   Serial.begin(9600);
+  Serial2.begin(9600);
+  Serial3.begin(9600);
   GameManager* gm = new GameManager();
   gm->run();
   return 0;
