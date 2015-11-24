@@ -164,6 +164,12 @@ class Snake{
   uint8_t getY(){
     return headComp->getY();
   }
+  uint8_t getTailX(){
+    return tailComp->getX();
+  }
+  uint8_t getTailY(){
+    return tailComp->getY();
+  }
   Direction getDirection(){
     return headComp->getDirection();
   }
@@ -223,20 +229,59 @@ class GameManager{
       s[2] = new Snake(100,108,UP,0x00FF,20);
     }
     void detectCollision(){
-      bool isVert = (s->getDirection() % 2 == 0);
+      bool isVert;
+      int index;
+      uint8_t pos,align1; //properties of the snake in focus
+      uint8_t A,B,align2; //properties of another snake
       
-      int index = s->getQIndex() - 2;
-      while(index > 0){
-        Serial.println(index);
-        uint8_t align1 = isVert ? s->getY() : s->getX();
-        uint8_t align2 = isVert ? s->getEvent(index).y : s->getEvent(index).x;
-        if(align1 == align2){
-          uint8_t pos = isVert ? s->getX() : s->getY();
-          uint8_t A = isVert ? s->getEvent(index).x : s->getEvent(index).y;
-          uint8_t B = isVert ? s->getEvent(index-1).x : s->getEvent(index-1).y;
-          if((pos >= A && pos <= B) || (pos <= A && pos >= B)) s->kill();
+      for(int i = 0; i < 3; i++){
+        bool isVert = (s[i]->getDirection() % 2 == 0);
+        pos = isVert ? s[i]->getX() : s[i]->getY();
+        align1 = isVert ? s[i]->getY() : s[i]->getX();
+
+        for(int j = 0; j < 3; j++){
+          int index = s[j]->getQIndex();
+          
+          if(i!=j){
+            //Serial.print("Testing ");Serial.print(i);Serial.print(" against ");Serial.println(j);
+            if(index == 0){ //then just check the snake, which is moving in 1 direction
+              if(isVert != s[j]->getDirection() % 2){
+                A = isVert ? s[j]->getTailX() : s[j]->getTailY();
+                B = isVert ? s[j]->getX() : s[j]->getY();
+                if((pos >= A && pos <= B) || (pos <= A && pos >= B)){
+                  s[i]->kill();
+                  break;
+                }
+              }
+            }else{ //otherwise check the two ends of the snake
+              A = isVert ? s[j]->getTailX() : s[j]->getTailY();
+              B = isVert ? s[j]->getEvent(0).x : s[j]->getEvent(0).y;
+              if((pos >= A && pos <= B) || (pos <= A && pos >= B)){
+                s[i]->kill();
+                break;
+              }
+              A = isVert ? s[j]->getX() : s[j]->getY();
+              B = isVert ? s[j]->getEvent(index-1).x : s[j]->getEvent(index-1).y;
+              if((pos >= A && pos <= B) || (pos <= A && pos >= B)){
+                s[i]->kill();
+                break;
+              }
+            }
+          }
+          
+          //you want to check only perpendicular segments
+          index -= (isVert == s[j]->getDirection() % 2) ? 2 : 1;
+          while(index > 0){
+            Serial.println(index);
+            uint8_t align2 = isVert ? s[j]->getEvent(index).y : s[j]->getEvent(index).x;
+            if(align1 == align2){
+              uint8_t A = isVert ? s[j]->getEvent(index).x : s[j]->getEvent(index).y;
+              uint8_t B = isVert ? s[j]->getEvent(index-1).x : s[j]->getEvent(index-1).y;
+              if((pos >= A && pos <= B) || (pos <= A && pos >= B)) s[i]->kill();
+            }
+            index-=2;
+          }
         }
-        index-=2;
       }
     }
     void run(){
