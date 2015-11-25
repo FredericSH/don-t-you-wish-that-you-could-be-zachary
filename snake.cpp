@@ -283,11 +283,13 @@ class GameManager{
     }
     void run(){
       uint32_t time = millis();
-      while(!s[0]->isDead()){
+      while(!(s[0]->isDead() && s[1]->isDead() && s[2]->isDead())){
         if(millis() - time > 1000/fps){
           time = millis();
           for(int i = 0; i < 3; i++){
-            s[i]->update();
+            if(!s[i]->isDead()){
+              s[i]->update();
+            }
           }
           detectCollision();
           if(js->isPushed()){
