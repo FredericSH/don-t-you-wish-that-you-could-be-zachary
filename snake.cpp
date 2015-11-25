@@ -176,7 +176,7 @@ class Snake{
   void setDirection(int d){
     setDirection((d == 0) ? UP : (d == 1) ? RIGHT : (d == 2) ? DOWN : LEFT);  
   }
-  void youthInAsia(){
+  void kill(){
     dead = true;
   }
   boolean isDead(){
@@ -253,7 +253,7 @@ class GameManager{
             align2 = isVert ? s[j]->getY() :s[j]->getX();
             if((align1 == align2) &&
                   ((pos >= A && pos <= B) || (pos <= A && pos >= B))){
-              s[i]->youthInAsia();
+              s[i]->kill();
               break;
             }
           }
@@ -274,7 +274,7 @@ class GameManager{
             if(align1 == align2){
               uint8_t A = isVert ? Ax : Ay;
               uint8_t B = isVert ? Bx : By;
-              if((pos >= A && pos <= B) || (pos <= A && pos >= B)) s[i]->youthInAsia();
+              if((pos >= A && pos <= B) || (pos <= A && pos >= B)) s[i]->kill();
             }
             index-=2;
           }
