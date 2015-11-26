@@ -312,11 +312,11 @@ class GameManager{
           for(int i = 0; i < 3; i++){
             if(!s[i]->isDead()){
               s[i]->update();
-              if(getLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY()){
-                s[i].kill();
+              if(getLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY())){
+                s[i]->kill();
               }
               else{
-                 getLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY(), true);  
+                 setLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY(), true);  
               }
             }
           }
