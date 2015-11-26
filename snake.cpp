@@ -6,7 +6,7 @@
 
 
 enum Direction {UP,RIGHT,DOWN,LEFT};
-enum Event {MOVEDUP,MOVEDRIGHT,MOVEDOWN,MOVEDLEFT,MOVEDHIGHER,MOVEDLOWER};
+enum Event {MOVEDUP,MOVEDRIGHT,MOVEDDOWN,MOVEDLEFT,MOVEDHIGHER,MOVEDLOWER};
 const int snakeSpeed = 1;
 const int snakeWidth = 1;
 
@@ -89,17 +89,26 @@ class Snake{
     uint8_t y;
     uint16_t colour;
     Direction dir;
+    boolean finishedDrawing;
     public:
     SnakeComponent(uint8_t startX,uint8_t startY,Direction startDir,uint16_t col){
       x = startX;
       y = startY;
       dir = startDir;
       colour = col;
+      finishedDrawing = false;
     }  
     void update(){
       x -= (dir%2 == 1) ? dir - 2 : 0;  
+      if(x == 255) x = 127;
+      if(x == 128) x = 0;
       y += (dir%2 == 0) ? dir - 1 : 0;
-      tft.drawPixel(x,y,colour);
+      if(y == 255) y = 159;
+      if(y == 160) y = 0;
+      draw();
+    }
+    void draw(){
+       tft.drawPixel(x,y,colour);
     }
     void setDirection(Direction newDirection){
       dir = newDirection;  
@@ -113,6 +122,13 @@ class Snake{
     uint8_t getY(){
       return y;  
     }
+    boolean isFinishedDrawing(){
+      return finishedDrawing;
+    }
+    void setFinishedDrawing(boolean b){
+      finishedDrawing = b;
+    }
+
   };
   snakeEvent eventQueue[128];
   uint8_t queueIndex;
@@ -132,7 +148,9 @@ class Snake{
     {
     }
   void update(){
-    headComp->update();
+    if(!headComp->isFinishedDrawing()){
+      headComp->update();
+    }
     if(pendingLength != 0){
         pendingLength--;
     }
@@ -141,11 +159,21 @@ class Snake{
       Serial.println(eventQueue[0].y);
       Serial.println(eventQueue[0].e);
       if(tailComp->getX() == eventQueue[0].x && tailComp->getY() == eventQueue[0].y){
-        tailComp->setDirection((Direction)(eventQueue[0].e));
-        memmove(&eventQueue[0], &eventQueue[1], sizeof(eventQueue) - sizeof(*eventQueue));
-        queueIndex--;
+        if(eventQueue[0].e == MOVEDHIGHER || eventQueue[0].e == MOVEDLOWER){
+          tailComp->setFinishedDrawing(true);
+          memmove(&eventQueue[0], &eventQueue[1], sizeof(eventQueue) - sizeof(*eventQueue));
+          queueIndex--;
+          tailComp->draw();
+        }
+        else{
+          tailComp->setDirection((Direction)(eventQueue[0].e));
+          memmove(&eventQueue[0], &eventQueue[1], sizeof(eventQueue) - sizeof(*eventQueue));
+          queueIndex--;
+        }
       }
-      tailComp->update();  
+      if(!tailComp->isFinishedDrawing()){
+        tailComp->update();  
+      }
     }
   }
   void setDirection(Direction newDirection){
@@ -184,6 +212,7 @@ class Snake{
   }
   void setLayer(int newLayer){
     layer = newLayer;
+    headComp->setFinishedDrawing(true);
   }
   int getLayer(){
     return layer;
@@ -193,6 +222,18 @@ class Snake{
   }
   snakeEvent getEvent(int index){
     return eventQueue[index];
+  }
+  boolean isHeadDrawing(){
+    return headComp->isFinishedDrawing();
+  }
+  void setHeadDrawing(boolean b){
+    headComp->setFinishedDrawing(b);
+  }
+  boolean isTailDrawing(){
+    return headComp->isFinishedDrawing();
+  }
+  void setTailDrawing(boolean b){
+    tailComp->setFinishedDrawing(b);
   }
 };
 
@@ -211,7 +252,6 @@ class GameManager{
       if(packet > 3){
         if(packet == 4){
           s->setLayer( s->getLayer() + 1 %3);
-          
         }else if(packet ==5){
           s->setLayer( s->getLayer() - 1 %3);
           
