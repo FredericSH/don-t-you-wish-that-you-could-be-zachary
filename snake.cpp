@@ -167,9 +167,6 @@ class Snake{
         pendingLength--;
     }
     else{
-      Serial.println(eventQueue[0].x);
-      Serial.println(eventQueue[0].y);
-      Serial.println(eventQueue[0].e);
       if(tailComp->getX() == eventQueue[0].x && tailComp->getY() == eventQueue[0].y){
           tailComp->setDirection((Direction)(eventQueue[0].e));
           memmove(&eventQueue[0], &eventQueue[1], sizeof(eventQueue) - sizeof(*eventQueue));
@@ -292,10 +289,12 @@ class GameManager{
       }
     }
     boolean getLayerTile(uint8_t layer[16][160], uint8_t x, uint8_t y){
-      return layer[x/8][y]&(1>>x%8);
+      return layer[x/8][y]&(1>>(x%8));
     }
     void setLayerTile(uint8_t layer[16][160], uint8_t x, uint8_t y , boolean value){
-      layer[x/8][y] = (!value ^ layer[x/8][y]) & (1>>x%8);
+      if(getLayerTile(layer,x,y) != value){
+        layer[x/8][y] = layer[x/8][y] ^ (1>>(x%8));
+      }
     }
   public:    
     GameManager() : js (new JoystickListener(VERT,HOR,SEL,450)){
@@ -313,7 +312,8 @@ class GameManager{
             if(!s[i]->isDead()){
               s[i]->update();
               if(getLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY())){
-                s[i]->kill();
+                Serial.print("Snake Died");
+                //s[i]->kill();
               }
               else{
                  setLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY(), true);  
