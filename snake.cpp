@@ -256,12 +256,17 @@ const int fps = 30;
 //Receive changes in direction from the clients
 //Send to clients if stuff has to be drawn on their screen 
 //Changes in direction to snakes on clients screen
+typedef struct{
+  uint8_t pixel[16][160];
+}board;
 
 class GameManager{
   private:
     Snake* s[3];
-    uint8_t layer1[16][160];
-    uint8_t layer2[16][160];
+    //uint8_t layer1[16][160];
+    //uint8_t layer2[16][160];
+    board* layer1;
+    board* layer2;
     JoystickListener* js;
     void parseClientPacket(HardwareSerial &serial, Snake* s, int snakeNum){
       uint8_t packet = serial.read();
@@ -288,12 +293,12 @@ class GameManager{
         s->setDirection(packet);
       }
     }
-    boolean getLayerTile(uint8_t layer[16][160], uint8_t x, uint8_t y){
-      return layer[x/8][y]&(1>>(x%8));
+    bool getLayerTile(board* layer, uint8_t x, uint8_t y){
+      return layer->pixel[x/8][y]&(1<<(x%8)) > 0;
     }
-    void setLayerTile(uint8_t layer[16][160], uint8_t x, uint8_t y , boolean value){
+    void setLayerTile(board* layer, uint8_t x, uint8_t y , boolean value){
       if(getLayerTile(layer,x,y) != value){
-        layer[x/8][y] = layer[x/8][y] ^ (1>>(x%8));
+        layer->pixel[x/8][y] = layer->pixel[x/8][y] ^ (1<<(x%8));
       }
     }
   public:    
@@ -302,6 +307,8 @@ class GameManager{
       s[0] = new Snake(20,20,DOWN,0xFF00,20);
       s[1] = new Snake(20,100,RIGHT,0x0FF0,20);
       s[2] = new Snake(100,108,UP,0x00FF,20);
+      layer1 = (board*)malloc(sizeof(board));
+      layer2 = (board*)malloc(sizeof(board));
     }
     void run(){
       uint32_t time = millis();
@@ -309,15 +316,15 @@ class GameManager{
         if(millis() - time > 1000/fps){
           time = millis();
           for(int i = 0; i < 3; i++){
-            if(!s[i]->isDead()){
-              s[i]->update();
-              if(getLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY())){
-                Serial.print("Snake Died");
-                //s[i]->kill();
-              }
-              else{
-                 setLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY(), true);  
-              }
+            if(s[i]->isDead())continue;
+            s[i]->update();
+            Serial.print(getLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY()));
+            if(getLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY())){
+              Serial.print("Snake Died");
+              s[i]->kill();
+            }
+            else{
+               setLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY(), true);  
             }
           }
           if(js->isPushed()){
