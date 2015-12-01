@@ -24,6 +24,7 @@ const int SEL = 9;
 struct snakeEvent{
       uint8_t x;
       uint8_t y;
+      uint8_t layer;
       Event e;
   };
 
@@ -87,6 +88,7 @@ class Snake{
     private:
     uint8_t x;
     uint8_t y;
+    uint8_t layer;
     uint16_t colour;
     Direction dir;
     public:
@@ -95,6 +97,7 @@ class Snake{
       y = startY;
       dir = startDir;
       colour = col;
+      layer = 0;
     }  
     void update(){
       x -= (dir%2 == 1) ? dir - 2 : 0;
@@ -103,7 +106,7 @@ class Snake{
       y += (dir%2 == 0) ? dir - 1 : 0;
       if(y == 255) y = 159;
       if(y == 160) y = 0;
-      tft.drawPixel(x,y,colour);
+      if(layer == 0)tft.drawPixel(x,y,colour);
     }
     void setDirection(Direction newDirection){
       dir = newDirection;  
@@ -116,6 +119,12 @@ class Snake{
     }
     uint8_t getY(){
       return y;  
+    }
+    void setLayer(int l){
+      layer = l;
+    }
+    uint8_t getLayer(){
+      return layer;
     }
   };
   snakeEvent eventQueue[128];
@@ -131,7 +140,7 @@ class Snake{
     headComp(new SnakeComponent(startX,startY,startDir,col)) , 
     tailComp(new SnakeComponent(startX,startY,startDir,0x0)) ,
     pendingLength(startingLength),
-    layer(1),
+    layer(0),
     queueIndex(0),
     activeEventIndex(0),
     dead(false)
@@ -145,6 +154,7 @@ class Snake{
     else{
       if(activeEventIndex!=queueIndex && tailComp->getX() == eventQueue[activeEventIndex].x && tailComp->getY() == eventQueue[activeEventIndex].y){
         tailComp->setDirection((Direction)(eventQueue[activeEventIndex++].e));
+        tailComp->setLayer(eventQueue[activeEventIndex-1].layer);
          if(activeEventIndex == 128) activeEventIndex = 0; 
       }
       tailComp->update();  
@@ -157,6 +167,7 @@ class Snake{
           temp.x = headComp->getX();
           temp.y = headComp->getY();
           temp.e = (Event) newDirection;
+          temp.layer = headComp->getLayer();
           eventQueue[queueIndex++] = temp; 
           if(queueIndex == 128)queueIndex = 0;
       }   
@@ -173,6 +184,9 @@ class Snake{
   uint8_t getTailY(){
     return tailComp->getY();
   }
+  uint8_t getTailLayer(){
+    return tailComp->getLayer();
+  }
   Direction getDirection(){
     return headComp->getDirection();
   }
@@ -186,7 +200,14 @@ class Snake{
       return dead;  
   }
   void setLayer(int newLayer){
+    if(layer == newLayer)return;
     layer = newLayer;
+    headComp->setLayer(newLayer);
+    snakeEvent temp;
+    temp.x = headComp->getX();
+    temp.y = headComp->getY();
+    temp.e = (Event)headComp->getDirection();
+    temp.layer = newLayer;
   }
   int getLayer(){
     return layer;
@@ -202,7 +223,7 @@ class Snake{
   }
 };
 
-const int fps = 240;
+const int fps = 60;
 
 
 //Receive changes in direction from the clients
@@ -250,24 +271,24 @@ class GameManager{
           qindex = s[j]->getQIndex();
           eindex = s[j]->getEIndex();
           if(qindex == eindex){
-            if(intersects(s[i]->getX(),s[i]->getY(),s[j]->getX(),s[j]->getY(),s[j]->getTailX(),s[j]->getTailY())){
+            if(s[i]->getLayer() == s[j]->getTailLayer() && intersects(s[i]->getX(),s[i]->getY(),s[j]->getX(),s[j]->getY(),s[j]->getTailX(),s[j]->getTailY())){
               s[i]->kill();
               break;
             }
             continue;
           }else{
-            if(intersects(s[i]->getX(),s[i]->getY(),s[j]->getX(),s[j]->getY(),s[j]->getEvent(qindex-1).x,s[j]->getEvent(qindex-1).y)){
+            if(s[i]->getLayer() == s[j]->getEvent(qindex-1).layer && intersects(s[i]->getX(),s[i]->getY(),s[j]->getX(),s[j]->getY(),s[j]->getEvent(qindex-1).x,s[j]->getEvent(qindex-1).y)){
               s[i]->kill();
               break;
             }
-            if(intersects(s[i]->getX(),s[i]->getY(),s[j]->getEvent(eindex).x,s[j]->getEvent(eindex).y,s[j]->getTailX(),s[j]->getTailY())){
+            if(s[i]->getLayer() == s[j]->getTailLayer() && intersects(s[i]->getX(),s[i]->getY(),s[j]->getEvent(eindex).x,s[j]->getEvent(eindex).y,s[j]->getTailX(),s[j]->getTailY())){
               s[i]->kill();
               break;
             }
           }
           qindex = (qindex+127)%128;
           while(qindex!=eindex){
-            if(intersects(s[i]->getX(),s[i]->getY(),s[j]->getEvent(qindex).x,s[j]->getEvent(qindex).y,s[j]->getEvent((qindex+127)%128).x,s[j]->getEvent((qindex+127)%128).y)){
+            if(s[i]->getLayer() == s[j]->getEvent((qindex+127)%128).layer && intersects(s[i]->getX(),s[i]->getY(),s[j]->getEvent(qindex).x,s[j]->getEvent(qindex).y,s[j]->getEvent((qindex+127)%128).x,s[j]->getEvent((qindex+127)%128).y)){
               s[i]->kill();
               break;
             }
