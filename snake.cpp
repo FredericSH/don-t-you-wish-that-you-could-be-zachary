@@ -3,12 +3,16 @@
 #include <Adafruit_ST7735.h> // Hardware-specific library
 #include <SPI.h>
 #include <SD.h>
+#include "lines.h"
+#include "queues.h"
 
 
 enum Direction {UP,RIGHT,DOWN,LEFT};
 enum Event {MOVEDUP,MOVEDRIGHT,MOVEDDOWN,MOVEDLEFT,MOVEDINTO,MOVEDOUTOF};
 const int snakeSpeed = 1;
 const int snakeWidth = 1;
+llist snakeSegmentsX; //segments sorted by X pivot
+llist snakeSegmentsY; //segments sorted by Y pivot
 
 // standard U of A library settings, assuming Atmel Mega SPI pins
 #define SD_CS    5  // Chip select line for SD card
@@ -125,6 +129,9 @@ class Snake{
     uint8_t getY(){
       return y;  
     }
+    int getLayer(){
+      return layer;
+    }
     void setLayer(int newLayer){
       layer = newLayer;  
     }
@@ -142,8 +149,7 @@ class Snake{
     }
 
   };
-  snakeEvent eventQueue[128];
-  uint8_t queueIndex;
+  queue events;
   int pendingLength;
   int length;
   int layer;
@@ -157,7 +163,7 @@ class Snake{
     tailComp(new SnakeComponent(startX,startY,startDir,0x0,layer)) ,
     pendingLength(startingLength),
     length(startingLength),
-    queueIndex(0),
+    events(qqcreate()),
     dead(false)
     {
     }
@@ -167,10 +173,13 @@ class Snake{
         pendingLength--;
     }
     else{
-      if(tailComp->getX() == eventQueue[0].x && tailComp->getY() == eventQueue[0].y){
-          tailComp->setDirection((Direction)(eventQueue[0].e));
-          memmove(&eventQueue[0], &eventQueue[1], sizeof(eventQueue) - sizeof(*eventQueue));
-          queueIndex--;
+      if(tailComp->getX() == qqlast(events)->x && tailComp->getY() == qqlast(events)->y){
+          tailComp->setDirection((Direction)(qqlast(events)->direction));
+          int pivot = (Direction)qqlast(events)->direction % 2 == 0 ? qqlast(events)->x : qqlast(events)->y;
+          int indic = (Direction)qqlast(events)->direction % 2 == 0 ? qqlast(events)->y : qqlast(events)->x;
+          int succ = llremove((Direction)qqlast(events)->direction % 2 == 0 ? snakeSegmentsX : snakeSegmentsY, pivot, indic);
+          if(succ == 0)Serial.println("REMOVAL ERROR");
+          qqpop(events);
       }
       tailComp->update();  
     }
@@ -178,11 +187,12 @@ class Snake{
   void setDirection(Direction newDirection){
       if(abs(newDirection - headComp->getDirection()) != 2){
           headComp->setDirection(newDirection);
-          snakeEvent temp;
-          temp.x = headComp->getX();
-          temp.y = headComp->getY();
-          temp.e = (Event) newDirection;
-          addEvent(temp); 
+          int pivot = (Direction)qqfirst(events)->direction % 2 == 0 ? qqfirst(events)->x : qqfirst(events)->y;
+          int pivhead = (Direction)qqfirst(events)->direction%2 == 0 ? qqfirst(events)->y : qqfirst(events)->x;
+          int pivtail = (Direction)qqfirst(events)->direction%2 == 0 ? headComp->getY()   : headComp->getX();
+          lladd((Direction)qqfirst(events)->direction % 2 == 0 ? snakeSegmentsX : snakeSegmentsY,
+            pivot, pivhead, pivtail, qqfirst(events)->layer);
+          qqadd(events,headComp->getX(),headComp->getY(),(int)newDirection, layer);
       }   
   }
   uint8_t getX(){
@@ -223,13 +233,13 @@ class Snake{
     return layer;
   }
   uint8_t getQIndex(){
-    return queueIndex;
+    return (uint8_t)qqlength(events);
   }
-  snakeEvent getEvent(int index){
-    return eventQueue[index];
+  queue getEvent(){
+    return events;
   }
-  void addEvent(struct snakeEvent e){
-    eventQueue[queueIndex++] = e;
+  void addEvent(int x, int y, int direction){
+    qqadd(events,x,y,direction,layer);
   }
   boolean isHeadDrawing(){
     return headComp->isFinishedDrawing();
@@ -275,14 +285,10 @@ class GameManager{
           s->setLayer(newlayer);
         switch(newlayer){
           case 0:
-            snakeEvent e;
-            e.x = s->getX();
-            e.y = s->getY();
-            e.e = MOVEDINTO;
-            s->addEvent(e);
+            s->addEvent(s->getX(),s->getY(),(int)MOVEDINTO);
             break;
           case 1:
-            s->writeSnakeToSerial(snakeNum, Serial2);            
+            s->writeSnakeToSerial(snakeNum, Serial2);
             break;
         }
       }
@@ -291,12 +297,63 @@ class GameManager{
         s->setDirection(packet);
       }
     }
-    bool getLayerTile(board* layer, uint8_t x, uint8_t y){
-      return layer->pixel[x/8][y]&(1<<(x%8)) > 0;
+    bool intersects(int X, int Y, int x1, int y1, int x2, int y2){
+      if(x1 == x2){
+        return(X == x1 && Y > min(y1,y2) && Y < max(y1,y2));
+      }else{
+        return(Y == y1 && X > min(x1,x2) && X < max(x1,x2));
+      }
     }
-    void setLayerTile(board* layer, uint8_t x, uint8_t y , boolean value){
-      if(getLayerTile(layer,x,y) != value){
-        layer->pixel[x/8][y] ^= (1<<(x%8));
+    
+    void handleCollisions(){
+      bool isVert;
+      int index;
+      uint8_t pos,align; //properties of the snake in focus
+      
+      for(int i = 0; i < 3; i++){
+        if(s[i]->isDead())continue;
+
+        for(int j = 0; j < 3; j++){
+          int index = s[j]->getQIndex();
+          if(i!=j){
+            if(intersects(s[i]->getX(),s[i]->getY(), //head coordinates of snake i
+              s[j]->getX(), s[j]->getY(), //head coordinates of snake j
+              //then the neck of the snake
+              index == 0 ? s[j]->getTailX() : qqfirst(s[j]->getEvent())->x,
+              index == 0 ? s[j]->getTailY() : qqfirst(s[j]->getEvent())->y)){
+                Serial.println("Died hitting neck");
+                s[i]->kill();
+                break;
+            }
+          }
+          if(index > 0){
+            if(intersects(s[i]->getX(),s[i]->getY(),
+              s[j]->getTailX(),s[j]->getTailY(),
+              qqlast(s[j]->getEvent())->x,
+              qqlast(s[j]->getEvent())->y)){
+                Serial.println("Died hitting tail");
+                s[i]->kill();
+                break;
+            }
+          }
+        }
+        
+        isVert = (s[i]->getDirection() % 2 == 0);
+        pos = isVert ? s[i]->getX() : s[i]->getY();
+        align = isVert ? s[i]->getY() : s[i]->getX();
+        
+        line tocheck = llget(isVert ? snakeSegmentsX : snakeSegmentsY, pos); 
+        if(tocheck == 0)continue;
+        Serial.println("Trying segments");
+        line_t* focus = tocheck->first;
+        while(focus){
+          if(align > min(focus->head,focus->tail) && align < max(focus->head,focus->tail)){
+            Serial.println("Died hitting other");
+            s[i]->kill();
+            break;
+          }
+          focus = focus->next;
+        }
       }
     }
   public:    
@@ -305,10 +362,12 @@ class GameManager{
       s[0] = new Snake(20,20,DOWN,0xFF00,20);
       s[1] = new Snake(20,100,RIGHT,0x0FF0,20);
       s[2] = new Snake(100,108,UP,0x00FF,20);
-      layer1 = (board*)malloc(sizeof(board));
+      snakeSegmentsX = llmake();
+      snakeSegmentsY = llmake();
+      /*layer1 = (board*)malloc(sizeof(board));
       layer2 = (board*)malloc(sizeof(board));
       memset(layer1,2560,0);
-      memset(layer2,2560,0);
+      memset(layer2,2560,0);*/
     }
     void run(){
       uint32_t time = millis();
@@ -318,14 +377,16 @@ class GameManager{
           for(int i = 0; i < 3; i++){
             if(s[i]->isDead())continue;
             s[i]->update();
-            Serial.print(getLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY()));
+            /*Serial.print(getLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY()));
             if(getLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY())){
               Serial.print("Snake Died");
               s[i]->kill();
             }
             else{
                setLayerTile((s[i]->getLayer())? layer1 : layer2, s[i]->getX(), s[i]->getY(), true);  
-            }
+            }*/
+            
+            handleCollisions();
           }
           if(js->isPushed()){
             int deltaH = js->getHorizontal() - js->getHorizontalBaseline();

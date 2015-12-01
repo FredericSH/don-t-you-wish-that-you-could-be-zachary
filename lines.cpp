@@ -27,15 +27,17 @@ int llget_index(llist ll, int pivot){
 }
 
 line llget(llist ll, int pivot){
+  if(ll->length == 0)return 0;
   int toget = llget_index(ll,pivot); //find index
   return (toget == -1) ? 0 : ll->get[ll->index[toget]];
 }
 
-void lladd(llist ll, int pivot, int head, int tail){
+void lladd(llist ll, int pivot, int head, int tail, int layer){
   assert(ll->length < MAXLENGTH-1); //ensure list is not too big
   line_t* nline = (line_t*)malloc(sizeof(line_t));
   nline->head = head;
   nline->tail = tail;
+  nline->layer = layer;
   nline->next = 0; //create the line_t to add
   
   if(ll->length == 0){
@@ -79,9 +81,9 @@ void lladd(llist ll, int pivot, int head, int tail){
 }
 
 
-void llremove(llist ll, int pivot, int point){
+int llremove(llist ll, int pivot, int point){
   int torem = llget_index(ll,pivot);
-  if(torem == -1)return; //removing a line that doesn't exist
+  if(torem == -1)return 0; //removing a line that doesn't exist
   if(ll->get[ll->index[torem]]->length == 1){
     //this is the only line in the bin, so remove the bin
     free(ll->get[ll->index[torem]]->first);
@@ -91,7 +93,7 @@ void llremove(llist ll, int pivot, int point){
       //shift all remaining bins back
     }
     ll->length--; //a bin was removed
-    return;
+    return 1;
   }
   line_t* focus = ll->get[ll->index[torem]]->first;
   line_t* buf;
@@ -101,7 +103,7 @@ void llremove(llist ll, int pivot, int point){
     ll->get[ll->index[torem]]->first = buf;
     ll->get[ll->index[torem]]->length--;
     //remove the first line in chain
-    return;
+    return 1;
   }
   while(focus->next){ //scan for match
     if(focus->next->head == point || focus->next->tail == point){
@@ -110,7 +112,7 @@ void llremove(llist ll, int pivot, int point){
       focus->next = buf;
       ll->get[ll->index[torem]]->length--;
       //remove a following line in chain
-      return;
+      return 1;
     }
     focus = focus->next;
   }
