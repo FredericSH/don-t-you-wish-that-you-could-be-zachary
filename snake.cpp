@@ -263,8 +263,6 @@ typedef struct{
 class GameManager{
   private:
     Snake* s[3];
-    //uint8_t layer1[16][160];
-    //uint8_t layer2[16][160];
     board* layer1;
     board* layer2;
     JoystickListener* js;
@@ -298,7 +296,7 @@ class GameManager{
     }
     void setLayerTile(board* layer, uint8_t x, uint8_t y , boolean value){
       if(getLayerTile(layer,x,y) != value){
-        layer->pixel[x/8][y] = layer->pixel[x/8][y] ^ (1<<(x%8));
+        layer->pixel[x/8][y] ^= (1<<(x%8));
       }
     }
   public:    
@@ -309,6 +307,8 @@ class GameManager{
       s[2] = new Snake(100,108,UP,0x00FF,20);
       layer1 = (board*)malloc(sizeof(board));
       layer2 = (board*)malloc(sizeof(board));
+      memset(layer1,2560,0);
+      memset(layer2,2560,0);
     }
     void run(){
       uint32_t time = millis();
