@@ -199,8 +199,8 @@ class Snake{
   boolean isDead(){
       return dead;  
   }
-  void setLayer(int newLayer){
-    if(layer == newLayer)return;
+  void setLayer(){
+    int newLayer = (layer == 1) ? 0 : 1;
     layer = newLayer;
     headComp->setLayer(newLayer);
     snakeEvent temp;
@@ -237,10 +237,10 @@ class GameManager{
     void parseClientPacket(uint8_t packet, Snake* s){
       if(packet > 3){
         if(packet == 4){
-          s->setLayer( s->getLayer() + 1 %3);
+          s->setLayer();
           
         }else if(packet ==5){
-          s->setLayer( s->getLayer() - 1 %3);
+          s->setLayer();
           
         }
       }
@@ -299,6 +299,7 @@ class GameManager{
     }
     void run(){
       uint32_t time = millis();
+      bool handled = 0;
       while(!(s[0]->isDead() && s[1]->isDead() && s[2]->isDead())){
         if(millis() - time > 1000/fps){
           time = millis();
@@ -316,6 +317,14 @@ class GameManager{
             else{
               s[0]->setDirection((deltaV > 0) ? 2 : 0);
             }
+          }
+          if(js->isDepressed()){
+            if(!handled){
+              s[0]->setLayer();
+              handled = 1;
+            }
+          }else{
+            handled = 0;
           }
           if(Serial2.available()){
             parseClientPacket(Serial2.read(),s[1]);
