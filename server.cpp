@@ -293,21 +293,6 @@ class GameManager{
       while(!(s[0]->isDead()&&s[1]->isDead()&&s[2]->isDead())){
         if(millis() - time > 1000/fps){
           time = millis();
-          for(int i = 0; i < 3; i++){
-            if(s[i]->isDead())continue;
-            s[i]->update();
-            if(getPixel((s[i]->getLayer() == 0)? layer1 : layer2,s[i]->getX(),s[i]->getY()) == 1){
-              s[i]->setDead(true);
-              if(s[i]->getLayer() == 1){
-              	s[i]->writeSerializedSnake();
-              }
-              continue;
-            }
-            else{
-              setPixel((s[i]->getLayer() == 0)? layer1 : layer2,s[i]->getX(),s[i]->getY(),1);
-              setPixel((s[i]->getLayer() == 0)? layer1 : layer2,s[i]->getTailX(),s[i]->getTailY(),0);
-            }
-          }
           if(js->isPushed()){
             int deltaH = js->getHorizontal() - js->getHorizontalBaseline();
             int deltaV = js->getVertical() - js->getVerticalBaseline();
@@ -318,8 +303,7 @@ class GameManager{
               s[0]->setDirection((deltaV > 0) ? 2 : 0);
             }
           }
-          else if(js->isDepressed()&&!hasChangedLayer){
-            setPixel((s[0]->getLayer() == 0)? layer1 : layer2,s[0]->getX(),s[0]->getY(),0);            
+          else if(js->isDepressed()&&!hasChangedLayer){          
             s[0]->setLayer(!s[0]->getLayer());
             hasChangedLayer = true; 
           }
@@ -332,6 +316,24 @@ class GameManager{
           if(Serial3.available()){
             //parseClientPacket(Serial3, s[2], 2);
           }
+          for(int i = 0; i < 3; i++){
+            if(s[i]->isDead())continue;
+            s[i]->update();
+            if(getPixel((s[i]->getLayer() == 0)? layer1 : layer2,s[i]->getX(),s[i]->getY()) == 1){
+              s[i]->setDead(true);
+              Serial.print("Collided at ");
+              Serial.print(s[i]->getX());
+              Serial.println(s[i]->getY());
+              if(s[i]->getLayer() == 1){
+              	s[i]->writeSerializedSnake();
+              }
+              continue;
+            }
+            else{
+              setPixel((s[i]->getLayer() == 0)? layer1 : layer2,s[i]->getX(),s[i]->getY(),1);
+              setPixel((s[i]->getLayer() == 0)? layer1 : layer2,s[i]->getTailX(),s[i]->getTailY(),0);
+            }
+          }          
         }
       }  
       tft.print("ALl Snakes are Dead");
