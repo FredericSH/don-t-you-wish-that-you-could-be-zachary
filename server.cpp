@@ -331,7 +331,7 @@ class GameManager{
             }
             else{
               setPixel((s[i]->getLayer() == 0)? layer1 : layer2,s[i]->getX(),s[i]->getY(),1);
-              setPixel((s[i]->getLayer() == 0)? layer1 : layer2,s[i]->getTailX(),s[i]->getTailY(),0);
+              setPixel((s[i]->getTailLayer() == 0)? layer1 : layer2,s[i]->getTailX(),s[i]->getTailY(),0);
             }
           }          
         }
