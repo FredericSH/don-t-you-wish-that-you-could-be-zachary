@@ -91,15 +91,13 @@ class Snake{
     // circular buffer containing all the line segments of the snake, with the form
     // x1,y1,x2,y2,layer,dir 
     snakeSeg lineSegments[maxSegs + 1];
+    // indices of head and tail of snake
     uint8_t head;
     uint8_t tail;
 
     uint8_t pendingLength;
-    int layer;
-
-    // number of segments in snake
     uint8_t length;
-  
+
     uint16_t colour;
 
     // current state of the life of the snake    
@@ -112,15 +110,15 @@ class Snake{
         colour = col;
         pendingLength = startingLength;
         dead = false;
-        layer = 0;
         lineSegments[head].x1 = startX;
         lineSegments[head].y1 = startY;
         lineSegments[head].x2 = startX;
         lineSegments[head].y2 = startY;
         lineSegments[head].dir = startDir;
+        lineSegments[head].layer = 0;
         length = 1;
       }
-    
+
     // safe incrementing of x and y as long as n < 255 - 127
     // don't initialize snake with more than 127 pending length
     void incrSafe(uint8_t &x, uint8_t n, uint8_t max){
@@ -134,7 +132,7 @@ class Snake{
         x -= n;
       }
       else{
-        x = (max + x) - n;
+        x = (max+ x) - n;
       }
     }
 
@@ -145,15 +143,31 @@ class Snake{
       // head movement
       switch(lineSegments[head].dir){
         case LEFT:
+          if(lineSegments[head].x2 == 0) { 
+            kill();
+            break;
+          }
           decrSafe(lineSegments[head].x2, 1, 127);
           break;
         case RIGHT:
+          if(lineSegments[head].x2 == 126) { 
+            kill();
+            break;
+          }
           incrSafe(lineSegments[head].x2, 1, 127);
           break;
         case UP:
+          if(lineSegments[head].y2 == 0) { 
+            kill();
+            break;
+          }
           decrSafe(lineSegments[head].y2, 1, 159);
           break;
         case DOWN:
+          if(lineSegments[head].y2 == 158) { 
+            kill();
+            break;
+          }
           incrSafe(lineSegments[head].y2, 1, 159);
           break;
       }
@@ -161,9 +175,9 @@ class Snake{
       // check to see if the tail is finished with going through this segment 
       // and empty segment and update tail if it is
       if(lineSegments[tail].x1 == lineSegments[tail].x2 && 
-            lineSegments[tail].y1 == lineSegments[tail].y2){
-        length--;
+          lineSegments[tail].y1 == lineSegments[tail].y2){
         // free up the tail
+        length--;
         incrSafe(tail, 1, maxSegs);
       }
 
@@ -188,14 +202,20 @@ class Snake{
         }
       }
 
-      // draw head and tail pixels
-      tft.drawPixel(lineSegments[head].x2, lineSegments[head].y2, colour);
-      tft.drawPixel(lineSegments[tail].x1, lineSegments[tail].y1, 0x0);
+      // draw head and tail pixels if they are on the correct layer
+      // otherwise send drawing info to client
+      if(lineSegments[head].layer == 0){
+        tft.drawPixel(lineSegments[head].x2, lineSegments[head].y2, colour);
+      }
+      if(lineSegments[tail].layer == 0){
+        tft.drawPixel(lineSegments[tail].x1, lineSegments[tail].y1, 0x0);
+      }
     }
     void setDirection(Direction newDir){
       if(queueFull()) { return; }
 
       length++;
+
       uint8_t prevHead = head;
       incrSafe(head, 1, maxSegs);
       lineSegments[head].x1 = lineSegments[prevHead].x2;
@@ -208,6 +228,8 @@ class Snake{
     void setLayer(uint8_t newLayer){
       if(queueFull()) { return; }
 
+      length++;
+
       uint8_t prevHead = head;
       incrSafe(head, 1, maxSegs);
       lineSegments[head].x1 = lineSegments[prevHead].x2;
@@ -217,68 +239,38 @@ class Snake{
       lineSegments[head].layer = newLayer; 
       lineSegments[head].dir = lineSegments[prevHead].dir;
     }
-    bool willCollide(uint8_t x, uint8_t y, Direction dir, bool isSelf){
-      uint8_t tHead = head;
-      for(uint8_t i = tail; i < tail; incrSafe(i, 1, length + 1)){
-        Serial.println(i);
-        if(1){
-          Serial.print("\ntHead is ");
-          Serial.println(tHead);
-          Serial.print("tail is ");
-          Serial.println(tail);
-          debug("Currentyly in collide");
-        }
-        // head always intersects itself, so we don't bother checking it
-        if(!(isSelf && i == head)) {
-          Serial.println("got to check 0");
-          // checks if temp head is pointing in the direction we want
-          uint8_t tmpX1 = lineSegments[i].x1;
-          uint8_t tmpX2 = lineSegments[i].x2;
-          uint8_t tmpY1 = lineSegments[i].y1;
-          uint8_t tmpY2 = lineSegments[i].y2;
-          Direction tmpDir = lineSegments[i].dir;
-          if((lineSegments[i].dir % 2) != (dir % 2)){
-            Serial.println("got to check #1");
-            // are we vertical?
-            if(tmpX1 = tmpX2){
-              Serial.println("got to check #2");
-              if(x == tmpY1){
-                Serial.println("got to check #3");
-                bool inBetween = min(tmpY1,tmpY2) <= y && y <= max(tmpY1, tmpY2);
-                if((tmpDir == DOWN && tmpY2 > tmpY1) || tmpDir == DOWN && tmpY1 > tmpY2){
-                  if(!inBetween){
-                    Serial.println("collided");
-                    return true;
-                  }
-                }
-                else if(inBetween){
-                  Serial.println("collided");
-                  return true;
-                }
-              }           
-            }
-            // else we're horizontal
-            else {
-              if(y == tmpY1){
-                Serial.println("got to check #2 2");
-                bool inBetween = min(tmpX1,tmpX2) <= x && x <= max(tmpX1, tmpX2);
-                if((tmpDir == LEFT && tmpX2 > tmpX1) || tmpDir == RIGHT && tmpX1 > tmpX2){
-                  Serial.println("got to check #3 2");
-                  if(!inBetween){
-                    Serial.println("collided");
-                    return true;
-                  }
-                }
-                else if(inBetween){
-                  Serial.println("collided");
-                  return true;
-                }
-              }
-            }
-          }
+    bool checkLine(uint8_t x, uint8_t y, uint8_t i, Direction dir, uint8_t layer){
+      uint8_t tmpX1 = lineSegments[i].x1;
+      uint8_t tmpX2 = lineSegments[i].x2;
+      uint8_t tmpY1 = lineSegments[i].y1;
+      uint8_t tmpY2 = lineSegments[i].y2;
+      Direction tmpDir = lineSegments[i].dir;
+      if(tmpDir % 2 != dir % 2 && layer == lineSegments[i].layer){
+        if(intersects(x, y, tmpX1, tmpY1, tmpX2, tmpY2)) return true;
+      }
+      return false;
+    }
+    bool intersects(uint8_t X, uint8_t Y, uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2){
+      if(x1 == x2){
+        return(X == x1 && Y >= min(y1,y2) && Y <= max(y1,y2));
+      }else{
+        return(Y == y1 && X >= min(x1,x2) && X <= max(x1,x2));
+      }
+    }
+    bool willCollide(uint8_t x, uint8_t y, Direction dir, uint8_t layer){
+      if(head > tail){
+        for(uint8_t i = tail; i < head; i++){
+          if(checkLine(x, y, i, dir, layer)) return true;
         }
       }
-      //debug("Leaving collide");
+      else if(head == tail){
+        if(checkLine(x, y, head, dir, layer)) return true;
+      }
+      else{
+        for(uint8_t i = head; i < tail; i++){
+          if(checkLine(x, y, i, dir, layer)) return true;
+        }
+      }
       return false;
     }
     uint8_t getX(){
@@ -315,35 +307,6 @@ class Snake{
         return true;
       }
       return false;
-    }
-    void debug(char* s){
-      Serial.println(s);
-      Serial.println("Available Mem");
-      Serial.println(AVAIL_MEM);
-      Serial.println("Debug: h, d, x1, y1, x2, y2");
-      Serial.print(head);
-      Serial.print(" ");
-      Serial.print(lineSegments[head].dir);
-      Serial.print(" ");
-      Serial.print(lineSegments[head].x1);
-      Serial.print(" ");
-      Serial.print(lineSegments[head].y1);
-      Serial.print(" ");
-      Serial.print(lineSegments[head].x2);
-      Serial.print(" ");
-      Serial.println(lineSegments[head].y2);
-      Serial.println("tail");
-      Serial.print(tail);
-      Serial.print(" ");
-      Serial.print(lineSegments[tail].dir);
-      Serial.print(" ");
-      Serial.print(lineSegments[tail].x1);
-      Serial.print(" ");
-      Serial.print(lineSegments[tail].y1);
-      Serial.print(" ");
-      Serial.print(lineSegments[tail].x2);
-      Serial.print(" ");
-      Serial.println(lineSegments[tail].y2);
     }
     void kill(){
       dead = true;
@@ -399,13 +362,14 @@ class GameManager{
   public:    
     GameManager() : js (new JoystickListener(VERT,HOR,SEL,450)){
       tft.fillScreen(0);
-      dirFlag = NEITHER;
-      s[0] = new Snake(64,80,DOWN,0xFF00,20);
-      s[1] = new Snake(20,100,RIGHT,0x0FF0,20);
-      s[2] = new Snake(100,108,UP,0x00FF,20);
+      dirFlag = VERTICAL;
+      s[0] = new Snake(64,80,DOWN,0xFF00,30);
+      s[1] = new Snake(20,100,RIGHT,0x0FF0,30);
+      s[2] = new Snake(100,108,UP,0x00FF,30);
     }
     // what's the previous direction that was pressed
     void run(){
+      bool handled;
       uint32_t time = millis();
       while(!(s[0]->isDead() && s[1]->isDead() && s[2]->isDead())){
         if(millis() - time > 1000/fps){
@@ -415,13 +379,10 @@ class GameManager{
               s[i]->update();
               uint8_t tmpX = s[i]->getX();
               uint8_t tmpY = s[i]->getY();
+              uint8_t tmpLayer = s[i]->getLayer();
               Direction tmpDir = s[i]->getDirection();
               for(int j = 0; j < 3; j++){
-                if(s[j]->willCollide(tmpX, tmpY, tmpDir, (i == j))){
-                  Serial.print("snake is : ");
-                  Serial.println(i);
-                  Serial.println("killed by : ");
-                  Serial.println(j);
+                if(s[j]->willCollide(tmpX, tmpY, tmpDir, tmpLayer)){
                   s[i]->kill();
                   break;
                 }
@@ -442,13 +403,21 @@ class GameManager{
               //s[0]->debug("On vertical");
             }
           }
+          if(js->isDepressed()){
+            if(!handled){
+              s[0]->setLayer(!s[0]->getLayer());
+              handled = 1;
+            }
+          }else{
+            handled = 0;
+          }
           // TODO more client stuff
           /*if(Serial2.available()){
             parseClientPacket(Serial2,s[1], 1);
             }
             if(Serial3.available()){
             parseClientPacket(Serial3,s[2] ,2);
-          }*/
+            }*/
         }
       }  
     }

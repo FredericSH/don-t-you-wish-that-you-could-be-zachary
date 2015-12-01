@@ -23,6 +23,7 @@ LINE LIST
 typedef struct line_struct{
 	int head;   //first point on line
 	int tail;   //last point on line
+	int layer;
 	line_struct* next; //for chains of equal pivots
 }line_t;
 
@@ -50,10 +51,11 @@ line llget(llist ll, int pivot);
 
 //adds and sorts a new line to a line list
 //will add to a chain if the pivot is not new
-void lladd(llist ll, int pivot, int head, int tail);
+void lladd(llist ll, int pivot, int head, int tail, int layer);
 
 //removes the line_t with the given pivot
-void llremove(llist ll, int pivot, int point);
+//1 if successful; 0 otherwise
+int llremove(llist ll, int pivot, int point);
 
 //frees up all memory used by a line list
 void lldestroy(llist ll);
