@@ -245,8 +245,18 @@ class Snake{
       uint8_t tmpY1 = lineSegments[i].y1;
       uint8_t tmpY2 = lineSegments[i].y2;
       Direction tmpDir = lineSegments[i].dir;
-      if(tmpDir % 2 != dir % 2 && layer == lineSegments[i].layer){
-        if(intersects(x, y, tmpX1, tmpY1, tmpX2, tmpY2)) return true;
+      if(layer == lineSegments[i].layer){
+        if(tmpDir % 2 != dir % 2){
+          if(intersects(x, y, tmpX1, tmpY1, tmpX2, tmpY2)) return true;
+        }
+        else{
+          if(tmpDir == dir){
+            if (x == tmpX1 && y == tmpY1) return true;
+          }
+          else{
+            if (x == tmpX2 && y == tmpY2) return true;
+          }
+        }
       }
       return false;
     }
