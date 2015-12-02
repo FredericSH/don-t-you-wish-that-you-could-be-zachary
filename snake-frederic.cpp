@@ -208,10 +208,10 @@ class Snake{
 
       // draw head and tail pixels if they are on the correct layer
       // otherwise send drawing info to client
-      //if(isServer){
-      //  if(lineSegments[head].layer == 0){
+      if(isServer){
+        if(lineSegments[head].layer == 0){
           tft.drawPixel(lineSegments[head].x2, lineSegments[head].y2, colour);
-      /*  }
+        }
         if(lineSegments[tail].layer == 0){
           tft.drawPixel(lineSegments[tail].x1, lineSegments[tail].y1, 0x0);
         }
@@ -220,10 +220,10 @@ class Snake{
         if(lineSegments[head].layer == 1){
           tft.drawPixel(lineSegments[head].x2, lineSegments[head].y2, colour);
         }
-        if(lineSegments[tail].layer == 0){ */
+        if(lineSegments[tail].layer == 1){
           tft.drawPixel(lineSegments[tail].x1, lineSegments[tail].y1, 0x0);
-    //    }
-    ///  }
+        }
+      }
     }
     void setDirection(Direction newDir){
       if(queueFull()) { return; }
@@ -447,26 +447,6 @@ class GameManager{
 
       Serial.println("Beginning main snake loop");
       
-      // send snake info to client
-      /*if(isServer){
-        Serial.println("Sending snake info");
-        for(int i = 0; i < numSnakes; i++){
-          Serial2.write(s[i]->getX());
-          Serial2.write(s[i]->getY());
-          Serial2.write(s[i]->getDirection());
-          Serial2.write(s[i]->getColour());
-          Serial2.write(s[i]->getLength());
-        }
-        Serial.println("Sent snake info");
-      }
-      else {
-        Serial.println("Recieving snake info");
-        for(int i = 0; i < numSnakes; i++){
-          s[i] = new Snake(Serial2.read(), Serial2.read(), (Direction)Serial2.read(), Serial2.read(), Serial2.read());
-        }
-        Serial.println("Recieved snake info");
-      }*/
-
       while(!(s[0]->isDead() && s[1]->isDead())){
         if(millis() - time > 1000/fps){
           int mySnake = isServer ? 0 : 1;
