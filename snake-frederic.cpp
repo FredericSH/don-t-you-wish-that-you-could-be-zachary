@@ -24,6 +24,9 @@ const int SEL = 9;
 // maximum index of an element in line segment array i.e. [0, maxSegs]
 #define maxSegs 30
 
+// is this arduino server or client
+bool isServer;
+
 struct snakeSeg{
   uint8_t x1;
   uint8_t y1;
@@ -91,6 +94,7 @@ class Snake{
     // circular buffer containing all the line segments of the snake, with the form
     // x1,y1,x2,y2,layer,dir 
     snakeSeg lineSegments[maxSegs + 1];
+
     // indices of head and tail of snake
     uint8_t head;
     uint8_t tail;
@@ -204,12 +208,22 @@ class Snake{
 
       // draw head and tail pixels if they are on the correct layer
       // otherwise send drawing info to client
-      if(lineSegments[head].layer == 0){
-        tft.drawPixel(lineSegments[head].x2, lineSegments[head].y2, colour);
+      //if(isServer){
+      //  if(lineSegments[head].layer == 0){
+          tft.drawPixel(lineSegments[head].x2, lineSegments[head].y2, colour);
+      /*  }
+        if(lineSegments[tail].layer == 0){
+          tft.drawPixel(lineSegments[tail].x1, lineSegments[tail].y1, 0x0);
+        }
       }
-      if(lineSegments[tail].layer == 0){
-        tft.drawPixel(lineSegments[tail].x1, lineSegments[tail].y1, 0x0);
-      }
+      else{
+        if(lineSegments[head].layer == 1){
+          tft.drawPixel(lineSegments[head].x2, lineSegments[head].y2, colour);
+        }
+        if(lineSegments[tail].layer == 0){ */
+          tft.drawPixel(lineSegments[tail].x1, lineSegments[tail].y1, 0x0);
+    //    }
+    ///  }
     }
     void setDirection(Direction newDir){
       if(queueFull()) { return; }
@@ -307,6 +321,12 @@ class Snake{
     uint8_t getLayer(){
       return lineSegments[head].layer;
     }
+    uint16_t getColour(){
+      return colour;
+    }
+    uint8_t getLength(){
+      return length;
+    }
     bool queueFull(){
       if(head == maxSegs && tail == 0){
         // line segment queue is full
@@ -324,15 +344,9 @@ class Snake{
     boolean isDead(){
       return dead;  
     }
-    void writeSnakeToSerial(int snakeNum,HardwareSerial &s){
-      s.write(snakeNum);
-      s.write(getX());
-      s.write(getY());
-      s.write(getDirection());
-    }
 };
 
-const int fps = 30;
+const int fps = 13;
 
 //Receive changes in direction from the clients
 //Send to clients if stuff has to be drawn on their screen 
@@ -340,94 +354,222 @@ const int fps = 30;
 
 class GameManager{
   private:
+    uint8_t numSnakes;
     Snake* s[3];
     JoystickListener* js;
     Orientation dirFlag;
-    // TODO This client stuff needs to be implemented to work with the current snake
-    /*void parseClientPacket(HardwareSerial &serial, Snake* s, int snakeNum){
-      uint8_t packet = serial.read();
-      if(packet > 3){
-      int newlayer;
-      if(packet == 4){
-      newlayer = serial.read();
-      s->setLayer(newlayer);
-      switch(newlayer){
-      case 0:
-      snakeSeg e;
-      e.x = s->getX();
-      e.y = s->getY();
-      e.e = MOVEDINTO;
-      s->addEvent(e);
-      break;
-      case 1:
-      s->writeSnakeToSerial(snakeNum, Serial2);            
-      break;
-      }
-      }
-      }
-      else{
-      s->setDirection(packet);
-      }
-      }*/
   public:    
     GameManager() : js (new JoystickListener(VERT,HOR,SEL,450)){
       tft.fillScreen(0);
-      dirFlag = VERTICAL;
-      s[0] = new Snake(64,80,DOWN,0xFF00,30);
-      s[1] = new Snake(20,100,RIGHT,0x0FF0,30);
-      s[2] = new Snake(100,108,UP,0x00FF,30);
+      // initialize current direction of movement
+      dirFlag = (isServer) ? VERTICAL : HORIZONTAL;
+      numSnakes = 2;
+      s[0] = new Snake(20,10,DOWN,0xFF00,30);
+      s[1] = new Snake(40,10,RIGHT,0x0FF0,30);
+    }
+    bool waitOnSerial( uint8_t nbytes, long timeout, HardwareSerial &s) {
+      unsigned long deadline = millis() + timeout; // wraparound not a problem
+      while (s.available()<nbytes && (timeout<0 || millis()<deadline)) {
+        delay(1); // be nice, no busy loop
+      }
+      return s.available()>=nbytes;
     }
     // what's the previous direction that was pressed
     void run(){
       bool handled;
       uint32_t time = millis();
-      while(!(s[0]->isDead() && s[1]->isDead() && s[2]->isDead())){
+      
+      // init serial communication with server or client
+      // handshake to ensure communication is happening before main loop      
+      typedef enum{listen, start, ack, data} phase;
+      phase currPhase;
+      Serial.println("I am here");
+      if(!isServer) {
+        currPhase = start;
+        while(currPhase != data) {
+          switch(currPhase){
+            case start:
+              Serial.println("Client request sent");
+              Serial2.write('C');
+              currPhase = ack;
+            case ack:
+              Serial.println("Waiting for acknowledgement ... ");
+              if(waitOnSerial(1, 1000, Serial2)){
+                char A = Serial2.read();
+                if(A != 'A'){
+                  Serial.println("No acknowledgement recieved");
+                  currPhase = start;
+                  break;
+                }
+                Serial.println("Got acknowledgement");
+                Serial2.write('A');
+                currPhase = data;
+              }
+              else{
+                Serial.println("Timeout");
+                currPhase = start;
+              }
+              break;
+          }
+        }
+      }
+      else {
+        currPhase = listen;
+        while(currPhase != data){
+          switch(currPhase){
+            case listen:
+              if(waitOnSerial(1, 1000, Serial2)){
+                char C = Serial2.read();
+                if(C == 'C') {
+                  currPhase = ack;
+                  Serial2.write('A');
+                }
+              }
+              else{
+                Serial.println("Timeout");
+              }
+            case ack:
+              Serial.println("Waiting for acknowledgement ... ");
+              if(waitOnSerial(1, 1000, Serial2)){
+                char A = Serial2.read();
+                if(A == 'A'){
+                  Serial.println("Got Acknowledgement");
+                  currPhase = data;
+                }
+              }
+              else {
+                Serial.println("Timeout");
+                currPhase = listen;
+              }
+          }
+        }
+      }
+
+      Serial.println("Beginning main snake loop");
+      
+      // send snake info to client
+      /*if(isServer){
+        Serial.println("Sending snake info");
+        for(int i = 0; i < numSnakes; i++){
+          Serial2.write(s[i]->getX());
+          Serial2.write(s[i]->getY());
+          Serial2.write(s[i]->getDirection());
+          Serial2.write(s[i]->getColour());
+          Serial2.write(s[i]->getLength());
+        }
+        Serial.println("Sent snake info");
+      }
+      else {
+        Serial.println("Recieving snake info");
+        for(int i = 0; i < numSnakes; i++){
+          s[i] = new Snake(Serial2.read(), Serial2.read(), (Direction)Serial2.read(), Serial2.read(), Serial2.read());
+        }
+        Serial.println("Recieved snake info");
+      }*/
+
+      while(!(s[0]->isDead() && s[1]->isDead())){
         if(millis() - time > 1000/fps){
+          int mySnake = isServer ? 0 : 1;
+          char myName = isServer ? '0' : '1';
           time = millis();
-          for(int i = 0; i < 3; i++){
+          for(int i = 0; i < numSnakes; i++){
             if(!s[i]->isDead()){
               s[i]->update();
               uint8_t tmpX = s[i]->getX();
               uint8_t tmpY = s[i]->getY();
               uint8_t tmpLayer = s[i]->getLayer();
               Direction tmpDir = s[i]->getDirection();
-              for(int j = 0; j < 3; j++){
+              for(int j = 0; j < numSnakes; j++){
                 if(s[j]->willCollide(tmpX, tmpY, tmpDir, tmpLayer)){
                   s[i]->kill();
+                  Serial2.write('K');
+                  Serial2.write(i ? '1' : '0');
+                  Serial2.write(i ? '1' : '0');
                   break;
                 }
               }
             }
           }
-          if(js->isPushed() && !s[0]->queueFull()){
+          if(js->isPushed() && !s[mySnake]->queueFull()){
             int deltaH = js->getHorizontal() - js->getHorizontalBaseline();
             int deltaV = js->getVertical() - js->getVerticalBaseline();
             if(abs(deltaH) > abs(deltaV) && (dirFlag != HORIZONTAL)){
-              s[0]->setDirection((deltaH > 0) ? RIGHT : LEFT);
+              s[mySnake]->setDirection((deltaH > 0) ? RIGHT : LEFT);
+              Serial2.write('D');
+              Serial2.write(myName);
+              Serial2.write((deltaH > 0) ? 'R' : 'L');
               dirFlag = HORIZONTAL;
               //s[0]->debug("On horizontal");
             }
             else if(abs(deltaV) > abs(deltaH) && dirFlag != VERTICAL){
-              s[0]->setDirection((deltaV > 0) ? DOWN : UP);
+              s[mySnake]->setDirection((deltaV > 0) ? DOWN : UP);
+              Serial2.write('D');
+              Serial2.write(myName);
+              Serial2.write((deltaV > 0) ? 'D' : 'U');
               dirFlag = VERTICAL;
               //s[0]->debug("On vertical");
             }
           }
           if(js->isDepressed()){
             if(!handled){
-              s[0]->setLayer(!s[0]->getLayer());
+              int currLayer = s[mySnake]->getLayer();
+              s[mySnake]->setLayer(currLayer ? 0 : 1);
+              Serial2.write('L');
+              Serial2.write(myName);
+              Serial2.write(currLayer ? '0' : '1');
               handled = 1;
             }
           }else{
             handled = 0;
           }
-          // TODO more client stuff
-          /*if(Serial2.available()){
-            parseClientPacket(Serial2,s[1], 1);
+          if(Serial2.available() >= 3){
+            char id = Serial2.read();
+            char snakeName = Serial2.read();
+            char in = Serial2.read();
+
+            Serial.println(id);
+            Serial.println(snakeName);
+            Serial.println(in);
+
+            switch(snakeName){
+              case '0':
+                snakeName = 0;
+                break;
+              case '1':
+                snakeName = 1;
+                break;
             }
-            if(Serial3.available()){
-            parseClientPacket(Serial3,s[2] ,2);
-            }*/
+            if(!s[snakeName]->isDead()){
+              if(id == 'D'){
+                switch(in){
+                  case 'L':
+                    s[snakeName]->setDirection(LEFT);
+                    break;
+                  case 'R':
+                    s[snakeName]->setDirection(RIGHT);
+                    break;
+                  case 'U':
+                    s[snakeName]->setDirection(UP);
+                    break;
+                  case 'D':
+                    s[snakeName]->setDirection(DOWN);
+                    break;
+                }
+              }
+              else if(id == 'L'){
+                switch(in){
+                  case '0':
+                    s[snakeName]->setLayer(0);
+                    break;
+                  case '1':
+                    s[snakeName]->setLayer(1);
+                }
+              }
+              else if(id == 'K'){
+                s[snakeName]->kill();
+              }
+            }
+          }
         }
       }  
     }
@@ -438,6 +580,8 @@ int main(){
   Serial.begin(9600);
   Serial2.begin(9600);
   Serial3.begin(9600);
+  pinMode(11, INPUT);
+  isServer = digitalRead(11);
   GameManager* gm = new GameManager();
   gm->run();
   Serial.end();
