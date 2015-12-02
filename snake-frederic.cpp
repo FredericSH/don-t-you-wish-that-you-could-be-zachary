@@ -448,6 +448,11 @@ class GameManager{
       Serial.println("Beginning main snake loop");
       
       while(!(s[0]->isDead() && s[1]->isDead())){
+        if(millis() - time > 1000){
+          for(int i = 0; i < numSnakes; i++){
+            s[i]->pendingLength += 10;
+          }
+        }
         if(millis() - time > 1000/fps){
           int mySnake = isServer ? 0 : 1;
           char myName = isServer ? '0' : '1';
