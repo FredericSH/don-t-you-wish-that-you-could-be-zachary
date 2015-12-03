@@ -328,15 +328,7 @@ class Snake{
       return length;
     }
     bool queueFull(){
-      if(head == maxSegs && tail == 0){
-        // line segment queue is full
-        return true;
-      }
-      if(head + 1 == tail){
-        // line segment queue is full
-        return true;
-      }
-      return false;
+      return((head == maxSegs && tail == 0) || (head + 1 == tail));
     }
     void kill(){
       dead = true;
@@ -346,7 +338,7 @@ class Snake{
     }
 };
 
-const int fps = 13;
+const int fps = 30;
 
 //Receive changes in direction from the clients
 //Send to clients if stuff has to be drawn on their screen 
@@ -384,6 +376,30 @@ class GameManager{
       typedef enum{listen, start, ack, data} phase;
       phase currPhase;
       Serial.println("I am here");
+      tft.setCursor(0,0);
+      tft.setTextColor(0xBBBB,0x0000);
+      tft.print("  | \n  | \n  | \n  | \n  | \n  `-------||SNAKE||>");
+      
+      delay(1000);
+      tft.setCursor(0,0);
+      tft.setTextColor(0xAAAA,0x0000);
+      tft.print("|\n|\n|\n|\n|\n|\n|\n`--------------|2p>");
+      
+      delay(500);
+      tft.setCursor(0,88);
+      tft.setTextColor(isServer ? 0xFF00 : 0x0FF0,0x0000);
+      tft.print(isServer ? "This arduino controlsthe blue snake!"
+                          : "This arduino controlsthe green snake!");
+      
+      delay(1500);
+      tft.setCursor(20,66);
+      tft.setTextColor(0xFFFF,0x0000);
+      tft.print("Click when ready");
+
+      while(!js->isDepressed())delay(1);
+      tft.setCursor(20,66);
+      tft.setTextColor(0xFFFF,0x0000);
+      tft.print("Connecting......");
       if(!isServer) {
         currPhase = start;
         while(currPhase != data) {
@@ -444,15 +460,10 @@ class GameManager{
           }
         }
       }
-
+      tft.fillScreen(0);
       Serial.println("Beginning main snake loop");
       
-      while(!(s[0]->isDead() && s[1]->isDead())){
-        if(millis() - time > 1000){
-          for(int i = 0; i < numSnakes; i++){
-            s[i]->pendingLength += 10;
-          }
-        }
+      while(!s[0]->isDead() && !s[1]->isDead()){
         if(millis() - time > 1000/fps){
           int mySnake = isServer ? 0 : 1;
           char myName = isServer ? '0' : '1';
@@ -556,7 +567,41 @@ class GameManager{
             }
           }
         }
-      }  
+      }
+      tft.fillScreen(0x00FF);
+      tft.fillScreen(0xFFFF);
+      tft.setCursor(10,66);
+      tft.setTextColor(0x00FF,0xFFFF);
+      tft.print("---::GAME OVER::---");
+      
+      delay(1000);
+      tft.fillScreen(0x00FF);
+      tft.fillScreen(0);
+      delay(500);
+      tft.setCursor(0,66);
+      tft.setTextColor(0xFFFF,0x00FF);
+      if(s[0]->isDead()){
+        if(s[1]->isDead()){
+          tft.print("  Dead: BOTH\n\n");
+          tft.setTextColor(0xBBBB,0x0000);
+          tft.print("  TIE GAME\n");
+        }else{
+          tft.print("  Dead: BLUE\n\n");
+          tft.setTextColor(0x0FF0,0x0000);
+          tft.print("  GREEN SNAKE WINS\n");
+          delay(500);
+          tft.setCursor(0,0);
+          if(!isServer)tft.print("|\n|\n|\n|\n|\n|\n|\n|\n|\n|\n|\n|\n`-|Congratulations||>");
+        }
+      }else{
+        tft.print("  Dead: GREEN\n\n");
+        tft.setTextColor(0xFF00,0x0000);
+        tft.print("  BLUE SNAKE WINS\n");
+        delay(500);
+        tft.setCursor(0,0);
+        if(isServer)tft.print("|\n|\n|\n|\n|\n|\n|\n|\n|\n|\n|\n|\n`-|Congratulations||>");
+      }
+      
     }
 };
 int main(){
@@ -564,11 +609,11 @@ int main(){
   tft.initR(INITR_REDTAB); // initialize a ST7735R chip, green tab
   Serial.begin(9600);
   Serial2.begin(9600);
-  Serial3.begin(9600);
   pinMode(11, INPUT);
   isServer = digitalRead(11);
   GameManager* gm = new GameManager();
   gm->run();
   Serial.end();
+  Serial2.end();
   return 0;
 }
