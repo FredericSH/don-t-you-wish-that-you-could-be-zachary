@@ -3,6 +3,7 @@
 #include <Adafruit_ST7735.h> // Hardware-specific library
 #include <SPI.h>
 #include <SD.h>
+#include <stdlib.h>
 
 #include "mem_syms.h"
 
@@ -26,6 +27,7 @@ const int SEL = 9;
 
 // is this arduino server or client
 bool isServer;
+int wait = 0;
 
 struct snakeSeg{
   uint8_t x1;
@@ -331,6 +333,7 @@ class Snake{
       return((head == maxSegs && tail == 0) || (head + 1 == tail));
     }
     void kill(){
+      wait = 15;
       dead = true;
     }
     boolean isDead(){
@@ -370,6 +373,8 @@ class GameManager{
     void run(){
       bool handled;
       uint32_t time = millis();
+      int counter = 150;
+      char* lengthstr = (char*)malloc(4*sizeof(char));
       
       // init serial communication with server or client
       // handshake to ensure communication is happening before main loop      
@@ -460,14 +465,46 @@ class GameManager{
           }
         }
       }
+      tft.fillScreen(isServer ? 0xFFFF : 0x00FF);
+      tft.setCursor(10,66);
+      tft.setTextColor(0x0000);
+      tft.print(isServer ? "READY?..." : "OTHER SCREEN");
+      tft.setTextColor(0xFFFF,0x00FF);
+      
+      tft.setCursor(60,88);
+      tft.print("[ 3 ]");
+      delay(1000);
+      tft.setCursor(60,88);
+      tft.print("[ 2 ]");
+      delay(1000);
+      tft.setCursor(60,88);
+      tft.print("[ 1 ]");
+      delay(1000);
+      
       tft.fillScreen(0);
       Serial.println("Beginning main snake loop");
-      
-      while(!s[0]->isDead() && !s[1]->isDead()){
+      while((!s[0]->isDead() && !s[1]->isDead()) || wait){
         if(millis() - time > 1000/fps){
+          if(wait){
+            wait--;
+            if(s[0]->isDead()){
+              Serial2.write('K');
+              Serial2.write('0');
+              Serial2.write('0');
+            }if(s[1]->isDead()){
+              Serial2.write('K');
+              Serial2.write('1');
+              Serial2.write('1');
+            }
+          }
           int mySnake = isServer ? 0 : 1;
           char myName = isServer ? '0' : '1';
           time = millis();
+          if(!--counter){
+            s[0]->pendingLength++;
+            s[1]->pendingLength++;
+            counter = 15;
+          }
           for(int i = 0; i < numSnakes; i++){
             if(!s[i]->isDead()){
               s[i]->update();
@@ -475,6 +512,18 @@ class GameManager{
               uint8_t tmpY = s[i]->getY();
               uint8_t tmpLayer = s[i]->getLayer();
               Direction tmpDir = s[i]->getDirection();
+              if(s[0]->getLayer() == s[1]->getLayer()
+                  && s[0]->getX() == s[1]->getX() && s[0]->getY() == s[1]->getY()){
+                s[0]->kill();
+                s[1]->kill();
+                Serial2.write('K');
+                Serial2.write('0');
+                Serial2.write('0');
+                Serial2.write('K');
+                Serial2.write('1');
+                Serial2.write('1');
+                break;
+              }
               for(int j = 0; j < numSnakes; j++){
                 if(s[j]->willCollide(tmpX, tmpY, tmpDir, tmpLayer)){
                   s[i]->kill();
