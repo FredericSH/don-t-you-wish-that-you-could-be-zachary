@@ -20,7 +20,7 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
 const int VERT = 0;
 const int HOR = 1;
-const int SEL = 9;
+const int SEL = 9; //joystick management
 
 // maximum index of an element in line segment array i.e. [0, maxSegs]
 #define maxSegs 30
@@ -35,7 +35,7 @@ struct snakeSeg{
   uint8_t x2;
   uint8_t y2;
   uint8_t layer;
-  Direction dir;
+  Direction dir; //information on each snake segment
 };
 
 class JoystickListener{
@@ -45,7 +45,7 @@ class JoystickListener{
     int depressionPin;
     int verticalBaseline;
     int horizontalBaseline;
-    int threshold;
+    int threshold; //initial thresholds for the joystick for reference
   public:
     // Pass the joystickListener the pin numbers that the joystick is hooked up to as well as the minimum threshold for input.
     JoystickListener(int vert, int hort, int sel, int thresh){
@@ -101,6 +101,8 @@ class Snake{
     uint8_t head;
     uint8_t tail;
 
+    //length management of the snakes
+    //pending length is the difference between current length and goal length
     uint8_t pendingLength;
     uint8_t length;
 
@@ -228,7 +230,7 @@ class Snake{
       }
     }
     void setDirection(Direction newDir){
-      if(queueFull()) { return; }
+      if(queueFull()) { return; } //user moved too much
 
       length++;
 
@@ -240,9 +242,10 @@ class Snake{
       lineSegments[head].y2 = lineSegments[head].y1;
       lineSegments[head].layer = lineSegments[prevHead].layer;
       lineSegments[head].dir = newDir;
+      //assign info to line segments for tail to follow
     }
     void setLayer(uint8_t newLayer){
-      if(queueFull()) { return; }
+      if(queueFull()) { return; } //user moved too much
 
       length++;
 
@@ -254,8 +257,18 @@ class Snake{
       lineSegments[head].y2 = lineSegments[head].y1;
       lineSegments[head].layer = newLayer; 
       lineSegments[head].dir = lineSegments[prevHead].dir;
+      //assign info to line segments for tail to follow
+    }
+    bool intersects(uint8_t X, uint8_t Y, uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2){
+      //determines if perpendicular lines intersect
+      if(x1 == x2){
+        return(X == x1 && Y >= min(y1,y2) && Y <= max(y1,y2));
+      }else{
+        return(Y == y1 && X >= min(x1,x2) && X <= max(x1,x2));
+      }
     }
     bool checkLine(uint8_t x, uint8_t y, uint8_t i, Direction dir, uint8_t layer){
+      //check if a segment intersects with a point (x,y)
       uint8_t tmpX1 = lineSegments[i].x1;
       uint8_t tmpX2 = lineSegments[i].x2;
       uint8_t tmpY1 = lineSegments[i].y1;
@@ -276,14 +289,8 @@ class Snake{
       }
       return false;
     }
-    bool intersects(uint8_t X, uint8_t Y, uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2){
-      if(x1 == x2){
-        return(X == x1 && Y >= min(y1,y2) && Y <= max(y1,y2));
-      }else{
-        return(Y == y1 && X >= min(x1,x2) && X <= max(x1,x2));
-      }
-    }
     bool willCollide(uint8_t x, uint8_t y, Direction dir, uint8_t layer){
+      //checks if (x,y) will collide with any part of this snake
       if(head > tail){
         for(uint8_t i = tail; i < head; i++){
           if(checkLine(x, y, i, dir, layer)) return true;
@@ -341,7 +348,7 @@ class Snake{
     }
 };
 
-const int fps = 30;
+const int fps = 30; //frame rate during gameplay
 
 //Receive changes in direction from the clients
 //Send to clients if stuff has to be drawn on their screen 
@@ -350,22 +357,22 @@ const int fps = 30;
 class GameManager{
   private:
     uint8_t numSnakes;
-    Snake* s[3];
+    Snake* s[2];
     JoystickListener* js;
     Orientation dirFlag;
   public:    
     GameManager() : js (new JoystickListener(VERT,HOR,SEL,450)){
       tft.fillScreen(0);
-      // initialize current direction of movement
+      // initialize current direction of movement for each snake
       dirFlag = (isServer) ? VERTICAL : HORIZONTAL;
       numSnakes = 2;
       s[0] = new Snake(20,10,DOWN,0xFF00,30);
       s[1] = new Snake(40,10,RIGHT,0x0FF0,30);
     }
     bool waitOnSerial( uint8_t nbytes, long timeout, HardwareSerial &s) {
-      unsigned long deadline = millis() + timeout; // wraparound not a problem
+      unsigned long deadline = millis() + timeout; //wait limit
       while (s.available()<nbytes && (timeout<0 || millis()<deadline)) {
-        delay(1); // be nice, no busy loop
+        delay(1); // to reduce business
       }
       return s.available()>=nbytes;
     }
@@ -376,8 +383,7 @@ class GameManager{
       int counter = 150;
       char* lengthstr = (char*)malloc(4*sizeof(char));
       
-      // init serial communication with server or client
-      // handshake to ensure communication is happening before main loop      
+      //solely for aesthetics
       typedef enum{listen, start, ack, data} phase;
       phase currPhase;
       Serial.println("I am here");
@@ -401,10 +407,13 @@ class GameManager{
       tft.setTextColor(0xFFFF,0x0000);
       tft.print("Click when ready");
 
-      while(!js->isDepressed())delay(1);
+      while(!js->isDepressed())delay(1); //wait for user input
       tft.setCursor(20,66);
       tft.setTextColor(0xFFFF,0x0000);
       tft.print("Connecting......");
+      
+      // init serial communication with server or client
+      // handshake to ensure communication is happening before main loop 
       if(!isServer) {
         currPhase = start;
         while(currPhase != data) {
@@ -465,12 +474,15 @@ class GameManager{
           }
         }
       }
+      //more aesthetics
       tft.fillScreen(isServer ? 0xFFFF : 0x00FF);
       tft.setCursor(10,66);
       tft.setTextColor(0x0000);
+      //ensure that both players are looking at the starting layer
       tft.print(isServer ? "READY?..." : "OTHER SCREEN");
       tft.setTextColor(0xFFFF,0x00FF);
       
+      //countdown
       tft.setCursor(60,88);
       tft.print("[ 3 ]");
       delay(1000);
@@ -484,8 +496,8 @@ class GameManager{
       tft.fillScreen(0);
       Serial.println("Beginning main snake loop");
       while((!s[0]->isDead() && !s[1]->isDead()) || wait){
-        if(millis() - time > 1000/fps){
-          if(wait){
+        if(millis() - time > 1000/fps){ //only run in the framerate
+          if(wait){ //allows for arduinos to finalise win conditions
             wait--;
             if(s[0]->isDead()){
               Serial2.write('K');
@@ -500,21 +512,21 @@ class GameManager{
           int mySnake = isServer ? 0 : 1;
           char myName = isServer ? '0' : '1';
           time = millis();
-          if(!--counter){
+          if(!--counter){ //decrement then check
             s[0]->pendingLength++;
             s[1]->pendingLength++;
-            counter = 15;
+            counter = 15; //increment snakes' sizes 2 times / s
           }
           for(int i = 0; i < numSnakes; i++){
             if(!s[i]->isDead()){
-              s[i]->update();
+              s[i]->update(); //update snake position
               uint8_t tmpX = s[i]->getX();
               uint8_t tmpY = s[i]->getY();
               uint8_t tmpLayer = s[i]->getLayer();
               Direction tmpDir = s[i]->getDirection();
               if(s[0]->getLayer() == s[1]->getLayer()
                   && s[0]->getX() == s[1]->getX() && s[0]->getY() == s[1]->getY()){
-                s[0]->kill();
+                s[0]->kill(); //check for head-on collision
                 s[1]->kill();
                 Serial2.write('K');
                 Serial2.write('0');
@@ -526,7 +538,7 @@ class GameManager{
               }
               for(int j = 0; j < numSnakes; j++){
                 if(s[j]->willCollide(tmpX, tmpY, tmpDir, tmpLayer)){
-                  s[i]->kill();
+                  s[i]->kill(); //check for regular collisions
                   Serial2.write('K');
                   Serial2.write(i ? '1' : '0');
                   Serial2.write(i ? '1' : '0');
@@ -536,6 +548,7 @@ class GameManager{
             }
           }
           if(js->isPushed() && !s[mySnake]->queueFull()){
+            //allow user to move snake
             int deltaH = js->getHorizontal() - js->getHorizontalBaseline();
             int deltaV = js->getVertical() - js->getVerticalBaseline();
             if(abs(deltaH) > abs(deltaV) && (dirFlag != HORIZONTAL)){
@@ -555,8 +568,8 @@ class GameManager{
               //s[0]->debug("On vertical");
             }
           }
-          if(js->isDepressed()){
-            if(!handled){
+          if(js->isDepressed()){ //jump layer
+            if(!handled){ //ensure the joystick isn't being held down
               int currLayer = s[mySnake]->getLayer();
               s[mySnake]->setLayer(currLayer ? 0 : 1);
               Serial2.write('L');
@@ -567,7 +580,7 @@ class GameManager{
           }else{
             handled = 0;
           }
-          if(Serial2.available() >= 3){
+          if(Serial2.available() >= 3){ //read incoming bytes
             char id = Serial2.read();
             char snakeName = Serial2.read();
             char in = Serial2.read();
@@ -584,6 +597,7 @@ class GameManager{
                 snakeName = 1;
                 break;
             }
+            //parse and interpret
             if(!s[snakeName]->isDead()){
               if(id == 'D'){
                 switch(in){
@@ -617,6 +631,8 @@ class GameManager{
           }
         }
       }
+      
+      //game-ending aesthetics, once at least one snake dies
       tft.fillScreen(0x00FF);
       tft.fillScreen(0xFFFF);
       tft.setCursor(10,66);
@@ -629,6 +645,7 @@ class GameManager{
       delay(500);
       tft.setCursor(0,66);
       tft.setTextColor(0xFFFF,0x00FF);
+      //identify the winner, if applicable
       if(s[0]->isDead()){
         if(s[1]->isDead()){
           tft.print("  Dead: BOTH\n\n");
@@ -658,10 +675,10 @@ int main(){
   tft.initR(INITR_REDTAB); // initialize a ST7735R chip, green tab
   Serial.begin(9600);
   Serial2.begin(9600);
-  pinMode(11, INPUT);
+  pinMode(11, INPUT); //read to identify server
   isServer = digitalRead(11);
   GameManager* gm = new GameManager();
-  gm->run();
+  gm->run(); //play the game, once
   Serial.end();
   Serial2.end();
   return 0;
